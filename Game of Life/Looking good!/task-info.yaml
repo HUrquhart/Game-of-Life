@@ -1,0 +1,302 @@
+type: edu
+custom_name: stage4
+files:
+- name: src/life/Main.java
+  visible: true
+  text: |
+    package life;
+
+    public class Main {
+        public static void main(String[] args) {
+            System.out.println("Hello World!");
+        }
+    }
+  learner_created: false
+- name: test/GameOfLifeTest.java
+  visible: false
+  text: |2
+
+    import common.GameOfLifeStage4Test;
+
+    public class GameOfLifeTest extends GameOfLifeStage4Test {
+
+    }
+  learner_created: false
+- name: test/common/CheckResultUtil.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+
+    operator fun CheckResult.component1(): Boolean = isCorrect
+    operator fun CheckResult.component2(): String? = feedback
+
+    fun fail(message: String) = CheckResult(false, message)
+  learner_created: false
+- name: test/common/ClueWithChecker.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+    import org.hyperskill.hstest.v6.testcase.TestCase
+
+    sealed class ClueWithChecker(val input: String) {
+        fun toTestCase(): TestCase<ClueWithChecker> {
+            return TestCase<ClueWithChecker>().setInput(input).setAttach(this)
+        }
+    }
+
+    class ClueWithPredefinedFeedbackChecker(
+            val predefinedFeedback: String,
+            input: String,
+            val checker: (String) -> Boolean
+    ) : ClueWithChecker(input)
+
+    class ClueWithDynamicFeedbackChecker(
+            input: String,
+            val checker: (String) -> CheckResult
+    ) : ClueWithChecker(input)
+
+    fun createPredefinedFeedbackTest(
+            feedback: String,
+            input: String = "",
+            checker: (String) -> Boolean
+    ): TestCase<ClueWithChecker> {
+        return ClueWithPredefinedFeedbackChecker(
+                predefinedFeedback = feedback,
+                input = input,
+                checker = checker
+        ).toTestCase()
+    }
+
+    fun createDynamicFeedbackTest(input: String = "", checker: (String) -> CheckResult): TestCase<ClueWithChecker> {
+        return ClueWithDynamicFeedbackChecker(
+                input = input,
+                checker = checker
+        ).toTestCase()
+    }
+
+    fun checkClueWithCheckerTest(reply: String, clue: ClueWithChecker): CheckResult {
+        return try {
+            when (clue) {
+                is ClueWithDynamicFeedbackChecker -> clue.checker(reply)
+                is ClueWithPredefinedFeedbackChecker -> CheckResult(clue.checker(reply), clue.predefinedFeedback)
+            }
+        } catch (e: AssertionError) {
+            if (clue is ClueWithPredefinedFeedbackChecker) {
+                fail(clue.predefinedFeedback)
+            } else {
+                CheckResult.FALSE
+            }
+        }
+    }
+  learner_created: false
+- name: test/common/GameOfLifeCommonTest.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.assertj.swing.fixture.JLabelFixture
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+
+    fun checkLabelForInteger(labelRequirements: ComponentRequirements<JLabelFixture>): CheckResult {
+        val label = labelRequirements.requireExistingComponent()
+
+        val labelDigits = label.text().trim { !it.isDigit() }
+
+        if (labelDigits.toIntOrNull() == null) {
+            return fail("The '${labelRequirements.name}' label doesn't contain an integer.")
+        }
+
+        return CheckResult.TRUE
+    }
+  learner_created: false
+- name: test/common/GameOfLifeStage4Test.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.assertj.swing.fixture.JLabelFixture
+    import org.hyperskill.hstest.v6.stage.SwingTest
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+    import org.hyperskill.hstest.v6.testcase.TestCase
+    import life.GameOfLife
+
+    abstract class GameOfLifeStage4Test : SwingTest<ClueWithChecker>(GameOfLife()) {
+
+        override fun generate(): List<TestCase<ClueWithChecker>> {
+            val generationLabel = ComponentRequirements("GenerationLabel", isEnabled = true) { window.label(it) }
+            val aliveLabel = ComponentRequirements("AliveLabel", isEnabled = true) { window.label(it) }
+
+            return frameTests(::frame) +
+                    existenceTests(generationLabel, aliveLabel) +
+                    componentsAreEnabledTests(generationLabel, aliveLabel) +
+                    stage4Tests(
+                            generationLabelRequirements = generationLabel,
+                            aliveLabelRequirements = aliveLabel
+                    )
+        }
+
+        override fun check(reply: String, clue: ClueWithChecker): CheckResult {
+            return checkClueWithCheckerTest(reply = reply, clue = clue)
+        }
+    }
+
+    fun stage4Tests(
+            generationLabelRequirements: ComponentRequirements<JLabelFixture>,
+            aliveLabelRequirements: ComponentRequirements<JLabelFixture>
+    ): List<TestCase<ClueWithChecker>> {
+        return listOf(
+                createDynamicFeedbackTest {
+                    with(checkLabelForInteger(generationLabelRequirements)) {
+                        if (!this.isCorrect) {
+                            return@createDynamicFeedbackTest this
+                        }
+                    }
+                    with(checkLabelForInteger(aliveLabelRequirements)) {
+                        if (!this.isCorrect) {
+                            return@createDynamicFeedbackTest this
+                        }
+                    }
+
+                    return@createDynamicFeedbackTest CheckResult.TRUE
+                }
+        )
+    }
+  learner_created: false
+- name: test/common/UiTestsGenerators.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.assertj.swing.fixture.AbstractJComponentFixture
+    import org.hyperskill.hstest.v6.stage.SwingTest
+    import org.hyperskill.hstest.v6.testcase.TestCase
+    import javax.swing.JFrame
+
+    fun frameTests(frameGetter: () -> JFrame): List<TestCase<ClueWithChecker>> {
+        return listOf(
+                createPredefinedFeedbackTest("Window is not visible") { frameGetter().isVisible }
+        )
+    }
+
+    class ComponentRequirements<ComponentType : AbstractJComponentFixture<*, *, *>>(
+            val name: String,
+            val isEnabled: Boolean,
+            private val componentFinder: (String) -> ComponentType?
+    ) {
+        val suitableComponent: ComponentType? by lazy { componentFinder(name) }
+    }
+
+    fun existenceTests(vararg components: ComponentRequirements<*>): List<TestCase<ClueWithChecker>> {
+        fun generateExistenceTest(requirements: ComponentRequirements<*>): TestCase<ClueWithChecker> {
+            return createPredefinedFeedbackTest("No suitable component with name '${requirements.name}' is found") {
+                SwingTest.checkExistence { requirements.suitableComponent }
+            }
+        }
+
+        return components.map(::generateExistenceTest)
+    }
+
+    fun componentsAreEnabledTests(vararg components: ComponentRequirements<*>): List<TestCase<ClueWithChecker>> {
+        fun generateIsEnabledTest(requirements: ComponentRequirements<*>): TestCase<ClueWithChecker> {
+            val (desiredState, stateChecker) = if (requirements.isEnabled) {
+                "enabled" to { requirements.requireExistingComponent().isEnabled }
+            } else {
+                "disabled" to { !requirements.requireExistingComponent().isEnabled }
+            }
+
+            return createPredefinedFeedbackTest("The '${requirements.name}' component should be $desiredState") {
+                stateChecker()
+            }
+
+        }
+
+        return components.map(::generateIsEnabledTest)
+    }
+
+    fun <ComponentType : AbstractJComponentFixture<*, *, *>>
+            ComponentRequirements<ComponentType>.requireExistingComponent(): ComponentType {
+        return requireNotNull(this.suitableComponent) {
+            "Must check for the '${this.name}' component existence before this test"
+        }
+    }
+  learner_created: false
+- name: src/life/GameOfLife.java
+  visible: true
+  text: |
+    package life;
+
+    import javax.swing.*;
+
+    public class GameOfLife extends JFrame {
+        public GameOfLife() {
+            setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            setSize(300, 300);
+            setVisible(true);
+        }
+    }
+  learner_created: false
+- name: src/life/Universe.java
+  visible: true
+  text: "package life;\n\nimport java.util.Random;\n\npublic class Universe {\n\t\
+    private boolean[] board;\n\tprivate int size;\n\tprivate int numAlive;\n\tpublic\
+    \ Universe(int size) {\n\t\tthis.size = size;\n\t\tthis.board = new boolean[size*size];\n\
+    \t\tRandom random = new Random();\n\t\tfor (int i = 0; i < size*size; i++) {\n\
+    \t\t\tthis.board[i] = random.nextBoolean();\n\t\t}\n\t\tthis.numAlive = 0;\n\t\
+    }\n\n\n\n\t// gets a location relative to a cell\n\tpublic boolean getLocation(int\
+    \ x, int y){\n\t\tint row = y, col = x;\n\t\tif(col < 0){\n\t\t\tcol = this.size-1;\n\
+    \t\t}\n\t\tif(col >= this.size){\n\t\t\tcol = 0;\n\t\t}\n\t\tif(row < 0){\n\t\t\
+    \trow = this.size-1;\n\t\t}\n\t\tif(row >= this.size){\n\t\t\trow = 0;\n\t\t}\n\
+    \t\treturn this.board[col+(row*this.size)];\n\t}\n\n\n\n\tpublic void getNextGeneration()\
+    \ {\n\t\tint s = this.getSize();\n\t\tboolean[] tempBoard = new boolean[s*s];\n\
+    \n\t\tint alive = 0;\n\n\t\tfor(int y = 0; y < s; y++){\n\t\t\tfor(int x = 0;\
+    \ x < s; x++){\n\t\t\t\tboolean loc = this.getLocation(x,y);\n\t\t\t\tint neighbours\
+    \ = this.getNeighbours(x,y);\n\n\t\t\t\tif(!loc && neighbours == 3){ // revive\
+    \ a cell\n\t\t\t\t\ttempBoard[x+(y*this.size)]= true;\n\t\t\t\t\talive++;\n\t\t\
+    \t\t} else { // determine a live cells fate\n\t\t\t\t\ttempBoard[x+(y*this.size)]\
+    \ = loc && (neighbours == 2 || neighbours == 3);\n\t\t\t\t\talive += (loc && (neighbours\
+    \ == 2 || neighbours == 3))? 1: 0;\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tthis.numAlive\
+    \ = alive;\n\t\tthis.board = tempBoard;\n\t}\n\n\tprivate int getNeighbours(int\
+    \ x, int y ) {\n\t\tint neighbours = 0;\n\n\t\t// check northwest\n\t\tif (this.getLocation(x-1,\
+    \ y-1)) { neighbours++; }\n\t\t// check north\n\t\tif (this.getLocation(x, y-1))\
+    \ { neighbours++; }\n\t\t// check northeast\n\t\tif (this.getLocation(x+1, y-1))\
+    \ { neighbours++; }\n\n\t\t// check west\n\t\tif (this.getLocation(x-1, y)) {\
+    \ neighbours++; }\n\t\t// check east\n\t\tif (this.getLocation(x+1, y)) { neighbours++;\
+    \ }\n\n\t\t// check southwest\n\t\tif (this.getLocation(x-1, y+1)) { neighbours++;\
+    \ }\n\t\t// check south\n\t\tif (this.getLocation(x, y+1)) { neighbours++; }\n\
+    \t\t// check southeast\n\t\tif (this.getLocation(x+1, y+1)) { neighbours++; }\n\
+    \n\t\treturn neighbours;\n\t}\n\tpublic int getSize(){\n\t\treturn this.size;\n\
+    \t}\n\n\tpublic boolean[] getBoard() {\n\t\treturn board;\n\t}\n\n\tpublic int\
+    \ getNumAlive() {\n\t\treturn this.numAlive;\n\t}\n}\n"
+  learner_created: true
+- name: src/life/UniverseView.java
+  visible: true
+  text: "package life;\n\npublic class UniverseView {\n\tpublic void print(boolean[]\
+    \ board, int size, int numAliveCells){\n\n\t\tSystem.out.println(\"Alive #\" +\
+    \ numAliveCells);\n\t\tfor(int i = 1; i <= size*size; i++){\n\t\t\tSystem.out.print((board[i-1])?'O':\
+    \ ' ');\n\t\t\tif(i%size == 0){\n\t\t\t\tSystem.out.println();\n\t\t\t}\n\t\t\
+    }\n\t}\n}\n"
+  learner_created: true
+- name: src/life/UniverseController.java
+  visible: true
+  text: "package life;\n\npublic class UniverseController {\n\tprivate Universe model;\n\
+    \tprivate UniverseView view;\n\tpublic UniverseController(Universe model, UniverseView\
+    \ view){\n\t\tthis.model = model;\n\t\tthis.view = view;\n\t}\n\n\tpublic void\
+    \ getNextGeneration(){\n\t\tthis.model.getNextGeneration();\n\t}\n\n\tpublic void\
+    \ updateView(){\n\t\tthis.view.print(this.model.getBoard(), this.model.getSize(),\
+    \ this.model.getNumAlive());\n\t}\n}\n"
+  learner_created: true
+feedback_link: https://hyperskill.org/projects/54/stages/298/implement
+status: Failed
+feedback:
+  message: Incorrect
+  time: Thu, 10 Sep 2020 19:55:56 UTC
+record: 4
